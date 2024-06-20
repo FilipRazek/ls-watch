@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 macro_rules! warn {
     ($($arg:tt)*) => {
         {
@@ -8,11 +10,12 @@ macro_rules! warn {
 }
 
 fn analyze_short_args(args: &Vec<String>) {
-    let mut short_args: Vec<char> = Vec::new();
-    let known_args: Vec<char> = vec![
-        'a', 'A', 'b', 'c', 'C', 'd', 'D', 'f', 'F', 'g', 'h', 'H', 'i', 'I', 'k', 'l', 'L', 'm',
-        'n', 'N', 'o', 'p', 'q', 'r', 'R', 's', 'S', 't', 'T', 'u', 'U', 'v', 'w', 'x', 'X', '1',
+    let mut short_args = HashMap::new();
+    let short_args_without_value: Vec<char> = vec![
+        'a', 'A', 'b', 'B', 'c', 'C', 'd', 'D', 'f', 'F', 'g', 'G', 'h', 'H', 'i', 'k', 'l', 'L',
+        'm', 'n', 'N', 'o', 'Q', 'r', 'R', 's', 'S', 't', 'u', 'U', 'v', 'x', 'Z', '1',
     ];
+    let short_args_with_value = vec!['I', 'p', 'w', 'T'];
     let mut short_arg_clusters = 0;
     for arg in args.iter() {
         if arg.len() < 2
@@ -22,14 +25,28 @@ fn analyze_short_args(args: &Vec<String>) {
             continue;
         }
         let mut empty_cluster = true;
-        for short_arg in arg.chars().skip(1) {
-            if known_args.contains(&short_arg) {
-                if short_args.contains(&short_arg) {
+        for (index, short_arg) in arg.chars().enumerate().skip(1) {
+            if short_args_without_value.contains(&short_arg) {
+                if short_args.contains_key(&short_arg) {
                     warn!("Duplicate argument: {}", short_arg);
                 } else {
-                    short_args.push(short_arg);
                     empty_cluster = false;
+                    short_args.insert(short_arg, "");
                 }
+            } else if short_args_with_value.contains(&short_arg) {
+                warn!("Argument with value: {}", short_arg);
+                if short_args.contains_key(&short_arg) {
+                    warn!("Duplicate argument: {}", short_arg);
+                } else {
+                    empty_cluster = false;
+                    let arg_value = &arg[index + 1..];
+                    if arg_value.is_empty() {
+                        warn!("Missing value for argument: {}", short_arg);
+                    } else {
+                        short_args.insert(short_arg, arg_value);
+                    }
+                }
+                break;
             } else {
                 warn!("Unknown argument: {}", short_arg);
             }
@@ -39,7 +56,8 @@ fn analyze_short_args(args: &Vec<String>) {
         }
     }
     if short_arg_clusters > 1 {
-        let combined_short_args: String = short_args.to_vec().iter().collect();
+        // TODO: Add support for argument values (I0)
+        let combined_short_args: String = short_args.keys().into_iter().collect();
         warn!(
             "Could have combined short arguments into -{}",
             &combined_short_args,
