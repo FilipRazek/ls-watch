@@ -1,36 +1,55 @@
-fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+macro_rules! warn {
+    ($($arg:tt)*) => {
+        {
+            eprint!("[LS-WATCH] ");
+            eprintln!($($arg)*);
+        }
+    }
+}
+
+fn analyze_short_args(args: &Vec<String>) {
     let mut short_args: Vec<char> = Vec::new();
     let known_args: Vec<char> = vec![
-        'a', 'A', 'b', 'c', 'C', 'd', 'D', 'f', 'F', 'i', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 'R',
-        's', 'S', 't', 'u', 'U', 'v', 'w', 'x', 'X', '1',
+        'a', 'A', 'b', 'c', 'C', 'd', 'D', 'f', 'F', 'g', 'h', 'H', 'i', 'I', 'k', 'l', 'L', 'm',
+        'n', 'N', 'o', 'p', 'q', 'r', 'R', 's', 'S', 't', 'T', 'u', 'U', 'v', 'w', 'x', 'X', '1',
     ];
     let mut short_arg_clusters = 0;
     for arg in args.iter() {
-        if arg.len() < 2 || !arg.starts_with('-') {
-            eprintln!("Ignored argument: {}", arg);
+        if arg.len() < 2
+            || !arg.starts_with('-')
+            || arg.chars().nth(1).expect("Failed to get short arg") == '-'
+        {
             continue;
         }
-        if arg.chars().nth(1).expect("Failed to get short arg") == '-' {
-            eprintln!("Long arguments are not supported yet: {}", arg);
-            continue;
-        }
-        short_arg_clusters += 1;
+        let mut empty_cluster = true;
         for short_arg in arg.chars().skip(1) {
             if known_args.contains(&short_arg) {
-                short_args.push(short_arg);
+                if short_args.contains(&short_arg) {
+                    warn!("Duplicate argument: {}", short_arg);
+                } else {
+                    short_args.push(short_arg);
+                    empty_cluster = false;
+                }
             } else {
-                eprintln!("Unknown argument: {}", short_arg);
+                warn!("Unknown argument: {}", short_arg);
             }
+        }
+        if !empty_cluster {
+            short_arg_clusters += 1;
         }
     }
     if short_arg_clusters > 1 {
         let combined_short_args: String = short_args.to_vec().iter().collect();
-        eprintln!(
-            "[LS-WATCH] Could have combined short arguments into -{}",
-            combined_short_args
+        warn!(
+            "Could have combined short arguments into -{}",
+            &combined_short_args,
         );
     }
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    analyze_short_args(&args);
 }
 
 // For reference, the man page:
