@@ -9,6 +9,34 @@ macro_rules! warn {
     }
 }
 
+fn combine_short_args(short_args: &HashMap<char, &str>) -> (String, i32) {
+    let mut no_value_block = String::new();
+    let mut other_blocks = vec![];
+    for (short_arg, value) in short_args {
+        if value.is_empty() {
+            no_value_block.push(*short_arg);
+        } else {
+            other_blocks.push(format!("{}{}", short_arg, value));
+        }
+    }
+    let mut combined_short_args = String::from("-");
+    combined_short_args.push_str(&no_value_block);
+    let mut total_clusters = if no_value_block.is_empty() { 0 } else { 1 };
+    match other_blocks.len() {
+        0 => {}
+        1 => {
+            combined_short_args.push_str(&other_blocks[0]);
+        }
+        _ => {
+            combined_short_args.push_str(&other_blocks[0]);
+            combined_short_args.push_str(" -");
+            combined_short_args.push_str(&other_blocks[1..].join(" -"));
+            total_clusters += other_blocks.len() - 1;
+        }
+    }
+    (combined_short_args, total_clusters as i32)
+}
+
 fn analyze_short_args(args: &Vec<String>) {
     let mut short_args = HashMap::new();
     let short_args_without_value: Vec<char> = vec![
@@ -17,7 +45,8 @@ fn analyze_short_args(args: &Vec<String>) {
     ];
     let short_args_with_value = vec!['I', 'p', 'w', 'T'];
     let mut short_arg_clusters = 0;
-    for arg in args.iter() {
+    let mut iterator = args.iter();
+    while let Some(arg) = iterator.next() {
         if arg.len() < 2
             || !arg.starts_with('-')
             || arg.chars().nth(1).expect("Failed to get short arg") == '-'
@@ -34,14 +63,22 @@ fn analyze_short_args(args: &Vec<String>) {
                     short_args.insert(short_arg, "");
                 }
             } else if short_args_with_value.contains(&short_arg) {
-                warn!("Argument with value: {}", short_arg);
                 if short_args.contains_key(&short_arg) {
                     warn!("Duplicate argument: {}", short_arg);
                 } else {
                     empty_cluster = false;
                     let arg_value = &arg[index + 1..];
                     if arg_value.is_empty() {
-                        warn!("Missing value for argument: {}", short_arg);
+                        // The next argument is the value
+                        let next_arg = iterator.next();
+                        match next_arg {
+                            Some(next_arg) => {
+                                short_args.insert(short_arg, next_arg);
+                            }
+                            None => {
+                                warn!("Missing value for argument: {}", short_arg);
+                            }
+                        }
                     } else {
                         short_args.insert(short_arg, arg_value);
                     }
@@ -55,11 +92,10 @@ fn analyze_short_args(args: &Vec<String>) {
             short_arg_clusters += 1;
         }
     }
-    if short_arg_clusters > 1 {
-        // TODO: Add support for argument values (I0)
-        let combined_short_args: String = short_args.keys().into_iter().collect();
+    let (combined_short_args, total_clusters) = combine_short_args(&short_args);
+    if short_arg_clusters > total_clusters {
         warn!(
-            "Could have combined short arguments into -{}",
+            "Could have combined short arguments into {}",
             &combined_short_args,
         );
     }
